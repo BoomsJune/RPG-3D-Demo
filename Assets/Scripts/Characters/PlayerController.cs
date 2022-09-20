@@ -12,21 +12,35 @@ public class PlayerController : MonoBehaviour
     private GameObject attackTarget;
     private float lastAttactTime;
 
+    private bool isDead;
+
+    private float stopDistance;
+
     void Awake()
     {
         agent = GetComponent<NavMeshAgent>();
         anim = GetComponent<Animator>();
         characterStates = GetComponent<CharacterStates>();
+
+        stopDistance = agent.stoppingDistance;
     }
 
     void Start()
     {
         MouseManager.Instance.OnMouseClicked += MoveToTarget;
         MouseManager.Instance.OnEnemyClicked += EventAttack;
+
+        GameManager.Instance.RegisterPlayer(characterStates);
     }
 
     void Update()
     {
+        isDead = characterStates.CurrentHealth == 0;
+        if (isDead)
+        {
+            GameManager.Instance.NotifyObservers();
+        }
+
         switchAnimation();
         lastAttactTime -= Time.deltaTime;
     }
@@ -34,11 +48,15 @@ public class PlayerController : MonoBehaviour
     private void switchAnimation()
     {
         anim.SetFloat("Speed", agent.velocity.sqrMagnitude);
+        anim.SetBool("Death", isDead);
     }
 
     public void MoveToTarget(Vector3 target)
     {
         StopAllCoroutines();
+        if(isDead)return;
+
+        agent.stoppingDistance = stopDistance;
         agent.isStopped = false;
         agent.destination = target;
     }
@@ -48,12 +66,15 @@ public class PlayerController : MonoBehaviour
         if (target == null) return;
 
         attackTarget = target;
+        characterStates.isCritical = UnityEngine.Random.value < characterStates.attackData.criticalChance;
         StartCoroutine(MoveToAttackTarget());
     }
 
     IEnumerator MoveToAttackTarget()
     {
         agent.isStopped = false;
+        agent.stoppingDistance = characterStates.attackData.attackRange;
+
         transform.LookAt(attackTarget.transform);
 
         while(Vector3.Distance(attackTarget.transform.position, transform.position) > characterStates.attackData.attackRange)
@@ -70,6 +91,13 @@ public class PlayerController : MonoBehaviour
             anim.SetTrigger("Attack");
             lastAttactTime = characterStates.attackData.coolDown;
         }
+    }
+
+    void Hit()
+    {
+        var targetStates = attackTarget.GetComponent<CharacterStates>();
+
+        targetStates.TakeDamage(characterStates, targetStates);
     }
 
 

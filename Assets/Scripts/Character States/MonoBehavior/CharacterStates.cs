@@ -6,12 +6,21 @@ using UnityEngine;
 
 public class CharacterStates : MonoBehaviour
 {
+    public CharacterData_SO templateData;
     public CharacterData_SO characterData;
 
     public AttackData_SO attackData;
 
     [HideInInspector]
     public bool isCritical;
+
+    private void Awake()
+    {
+        if (templateData != null)
+        {
+            characterData = Instantiate(templateData);
+        }
+    }
 
     #region Read from Data_SO
     public int MaxHealth {
@@ -41,8 +50,13 @@ public class CharacterStates : MonoBehaviour
     
     public void TakeDamage(CharacterStates attacker, CharacterStates defener)
     {
-        int damage = Mathf.Max( attacker.CurrentDamage() - defener.CurrentDefence, 0);
+        int damage = Mathf.Max( attacker.CurrentDamage() - defener.CurrentDefence, 1);
         CurrentHealth = Mathf.Max(CurrentHealth - damage, 0);
+
+        if (attacker.isCritical)
+        {
+            defener.GetComponent<Animator>().SetTrigger("Hit");
+        }
     }
 
     private int CurrentDamage()

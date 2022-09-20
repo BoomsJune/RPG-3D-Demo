@@ -3,25 +3,18 @@ using System.Collections.Generic;
 using UnityEngine;
 // using UnityEngine.Events;
 using System;
+using Unity.VisualScripting;
 
 // [System.Serializable]
 // public class EventVector3: UnityEvent<Vector3> { }
 
-public class MouseManager : MonoBehaviour
-{
-    public static MouseManager Instance;
+public class MouseManager : Singleton<MouseManager>
+{ 
 
     public Texture2D point, doorway, attack, target, arrow;
     RaycastHit hitInfo;
     public event Action<Vector3> OnMouseClicked;
     public event Action<GameObject> OnEnemyClicked;
-
-    void Awake()
-    {
-        if(Instance != null)
-            Destroy(gameObject);
-        Instance = this;
-    }
 
     void Update()
     {

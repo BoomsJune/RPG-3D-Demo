@@ -6,22 +6,26 @@ using UnityEngine.AI;
 public enum EnemyState { GUARD, PATROL, CHASE, DEAD}
 
 [RequireComponent(typeof(NavMeshAgent))]
-public class EnemyController : MonoBehaviour
+[RequireComponent(typeof(CharacterStates))]
+public class EnemyController : MonoBehaviour, IEndGameObserver
 {
     public EnemyState enemyState;
     private NavMeshAgent agent;
     private Animator anim;
+    private Collider coll;
 
-    private CharacterStates characterStates;
+    protected CharacterStates characterStates;
 
     [Header("Basic Settings")]
     public float sightRadius;
     public bool isGuard;
 
     private float speed;
-    private GameObject attackTarget;
+    protected GameObject attackTarget;
 
     private float lastAttackTime;
+
+    private Quaternion guardRotation;
 
 
     [Header("Patrol State")]
@@ -33,15 +37,20 @@ public class EnemyController : MonoBehaviour
     bool isWalk;
     bool isChase;
     bool isFollow;
+    bool isDead;
+
+    bool playerDead;
 
     private void Awake()
     {
         agent = GetComponent<NavMeshAgent>();
         anim = GetComponent<Animator>();
         characterStates = GetComponent<CharacterStates>();
+        coll = GetComponent<Collider>();
 
         speed = agent.speed;
         guardPos = transform.position;
+        guardRotation = transform.rotation;
     }
 
     private void Start()
@@ -57,8 +66,24 @@ public class EnemyController : MonoBehaviour
         }
     }
 
+    private void OnEnable()
+    {
+        GameManager.Instance.AddObserver(this);
+    }
+
+    private void OnDisable()
+    {
+        if (!GameManager.IsInitialized) return;
+        GameManager.Instance.RemoveObserver(this);
+    }
+
     private void Update()
     {
+        if (characterStates.CurrentHealth == 0)
+        {
+            isDead = true;
+        }
+        if (playerDead) return;
         SwitchState();
         SwitchAnimation();
         lastAttackTime -= Time.deltaTime;
@@ -70,11 +95,16 @@ public class EnemyController : MonoBehaviour
         anim.SetBool("Chase", isChase);
         anim.SetBool("Follow", isFollow);
         anim.SetBool("Critical", characterStates.isCritical);
+        anim.SetBool("Death", isDead);
     }
 
     void SwitchState()
     {
-        if (FoundPlayer())
+        if (isDead)
+        {
+            enemyState = EnemyState.DEAD;
+        }
+        else if (FoundPlayer())
         {
             enemyState = EnemyState.CHASE;
         }
@@ -82,6 +112,19 @@ public class EnemyController : MonoBehaviour
         switch (enemyState)
         {
             case EnemyState.GUARD:
+                isChase = false;
+                if(transform.position != guardPos)
+                {
+                    isWalk = true;
+                    agent.isStopped = false;
+                    agent.destination = guardPos;
+
+                    if (Vector3.SqrMagnitude(guardPos - transform.position) <= agent.stoppingDistance)
+                    {
+                        isWalk = false;
+                        transform.rotation = Quaternion.Lerp(transform.rotation, guardRotation, 0.01f);
+                    }
+                }
                 break;  
             case EnemyState.PATROL:
                 isChase = false;
@@ -140,6 +183,11 @@ public class EnemyController : MonoBehaviour
                 }
                 break;
             case EnemyState.DEAD:
+                coll.enabled = false;
+                //agent.enabled = false;
+                agent.radius = 0;
+
+                Destroy(gameObject, 2f);
                 break; 
         }
 
@@ -205,5 +253,24 @@ public class EnemyController : MonoBehaviour
     {
         Gizmos.color = Color.blue;
         Gizmos.DrawWireSphere(transform.position, sightRadius);
+    }
+
+    void Hit()
+    {
+        if (attackTarget == null) return;
+        if (!transform.IsFacingTarget(attackTarget.transform)) return;
+
+        var targetStates = attackTarget.GetComponent<CharacterStates>();
+
+        targetStates.TakeDamage(characterStates, targetStates);
+    }
+
+    public void EndNotify()
+    {
+        anim.SetBool("Win", true);
+        playerDead = true;
+        isChase = false;
+        isWalk = false;
+        attackTarget = null;
     }
 }
